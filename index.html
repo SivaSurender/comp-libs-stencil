@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>Document</title>
+    <script type="module" src="script.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "my-component": "./stencil-components/dist/components/my-component.js",
+          "my-block": "./stencil-components/dist/components/my-block.js",
+          "@stencil/core/internal/client": "./stencil-components/dist/esm/index.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div>
+      <my-component
+        first="Stencil"
+        last="'Don't call me a framework' JS"
+      ></my-component>
+    </div>
+    <div id="app"></div>
+  </body>
+</html>
