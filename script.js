@@ -1,6 +1,11 @@
-import "hero-block";
+import "main-wrapper";
+import "quote-block";
+
+// ✅ Dynamically Inject Components
 document.body.innerHTML += `
-  
-  <hero-block></hero-block>
- 
+
+  <main-wrapper
+    component-tag="quote-block"
+    data='${JSON.stringify({ text: "hidddd", author: "John Doe" })}'
+  ></main-wrapper>
 `;

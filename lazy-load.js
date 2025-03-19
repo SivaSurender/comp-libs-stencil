@@ -1,17 +1,32 @@
+const componentConfig = {
+  "quote-block": { hoc: false },
+  "hero-block": { hoc: false },
+  "main-wrapper": { hoc: true, wraps: ["quote-block"] },
+};
+
 async function loadComponent(name) {
   try {
-    await import(name);
+    await import(
+      `https://cdn.jsdelivr.net/npm/bweb-components/dist/components/${name}.js`
+    );
   } catch (error) {
     console.error(`Error loading component: ${name}`, error);
   }
 }
 
-// ✅ Automatically Load Components When They Appear in DOM
 document.addEventListener("DOMContentLoaded", () => {
-  document
-    .querySelectorAll("quote-block, main-wrapper, hero-block")
-    .forEach((element) => {
-      console.log(element, "Dfdf");
-      loadComponent(element.tagName.toLowerCase());
+  Object.keys(componentConfig).forEach((component) => {
+    document.querySelectorAll(component).forEach((element) => {
+      console.log(`Loading: ${component}`);
+      loadComponent(component);
+      console.log(`Loaded: ${component}`);
+
+      if (componentConfig[component].hoc) {
+        componentConfig[component].wraps.forEach((wrappedComponent) => {
+          console.log(wrappedComponent, "fgfgf");
+          loadComponent(wrappedComponent);
+        });
+      }
     });
+  });
 });
