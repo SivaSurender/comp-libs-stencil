@@ -8,6 +8,10 @@ export const config: Config = {
       esmLoaderPath: '../loader',
     },
     {
+      type: 'dist-hydrate-script',
+      dir: 'hydrate',
+    },
+    {
       type: 'dist-custom-elements',
       copy: [
         {

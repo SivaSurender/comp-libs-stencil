@@ -1,2 +1,2 @@
-import{p as o,b as t}from"./p-CxjoysEx.js";export{s as setNonce}from"./p-CxjoysEx.js";import{g as r}from"./p-DQuL1Twl.js";var a=()=>{const s=import.meta.url;const t={};if(s!==""){t.resourcesUrl=new URL(".",s).href}return o(t)};a().then((async s=>{await r();return t([["p-163d5569",[[1,"my-component",{first:[1],middle:[1],last:[1]}]]]],s)}));
+import{p as o,b as t}from"./p-BVenoWJ9.js";export{s as setNonce}from"./p-BVenoWJ9.js";import{g as e}from"./p-DQuL1Twl.js";var r=()=>{const s=import.meta.url;const t={};if(s!==""){t.resourcesUrl=new URL(".",s).href}return o(t)};r().then((async o=>{await e();return t([["p-ecb8d4e3",[[1,"my-component",{first:[1],middle:[1],last:[1]}]]]],o)}));
 //# sourceMappingURL=comps.esm.js.map

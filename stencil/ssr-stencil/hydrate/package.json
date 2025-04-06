@@ -1,0 +1,12 @@
+{
+  "name": "ssr-stencil/hydrate",
+  "description": "comps component hydration app.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./index.js",
+      "import": "./index.mjs"
+    }
+  }
+}

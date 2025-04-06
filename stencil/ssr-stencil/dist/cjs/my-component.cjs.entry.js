@@ -1,6 +1,6 @@
 'use strict';
 
-var index = require('./index-BVeJKAMz.js');
+var index = require('./index-BBQk2_q2.js');
 var index$1 = require('./index.cjs.js');
 
 const myComponentCss = ":host{display:block}";

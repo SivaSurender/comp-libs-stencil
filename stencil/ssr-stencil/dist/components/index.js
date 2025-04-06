@@ -9,6 +9,30 @@ var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
 };
+var PrimitiveType = /* @__PURE__ */ ((PrimitiveType2) => {
+  PrimitiveType2["Undefined"] = "undefined";
+  PrimitiveType2["Null"] = "null";
+  PrimitiveType2["String"] = "string";
+  PrimitiveType2["Number"] = "number";
+  PrimitiveType2["SpecialNumber"] = "number";
+  PrimitiveType2["Boolean"] = "boolean";
+  PrimitiveType2["BigInt"] = "bigint";
+  return PrimitiveType2;
+})(PrimitiveType || {});
+var NonPrimitiveType = /* @__PURE__ */ ((NonPrimitiveType2) => {
+  NonPrimitiveType2["Array"] = "array";
+  NonPrimitiveType2["Date"] = "date";
+  NonPrimitiveType2["Map"] = "map";
+  NonPrimitiveType2["Object"] = "object";
+  NonPrimitiveType2["RegularExpression"] = "regexp";
+  NonPrimitiveType2["Set"] = "set";
+  NonPrimitiveType2["Channel"] = "channel";
+  NonPrimitiveType2["Symbol"] = "symbol";
+  return NonPrimitiveType2;
+})(NonPrimitiveType || {});
+var TYPE_CONSTANT = "type";
+var VALUE_CONSTANT = "value";
+var SERIALIZED_PREFIX = "serialized:";
 
 // src/utils/es2022-rewire-class-members.ts
 var reWireGetterSetter = (instance, hostRef) => {
@@ -64,7 +88,16 @@ var consoleError = (e, el) => (0, console.error)(e, el);
 
 // src/client/client-style.ts
 var styles = /* @__PURE__ */ new Map();
+
+// src/runtime/runtime-constants.ts
+var CONTENT_REF_ID = "r";
+var ORG_LOCATION_ID = "o";
+var SLOT_NODE_ID = "s";
+var TEXT_NODE_ID = "t";
+var COMMENT_NODE_ID = "c";
+var HYDRATE_ID = "s-id";
 var HYDRATED_STYLE_ID = "sty-id";
+var HYDRATE_CHILD_ID = "c-id";
 var SLOT_FB_CSS = "slot-fb{display:contents}slot-fb[hidden]{display:none}";
 var win = typeof window !== "undefined" ? window : {};
 var H = win.HTMLElement || class {
@@ -140,6 +173,101 @@ function queryNonceMetaTagContent(doc) {
   return (_c = (_b = (_a = doc.head) == null ? void 0 : _a.querySelector('meta[name="csp-nonce"]')) == null ? void 0 : _b.getAttribute("content")) != null ? _c : void 0;
 }
 
+// src/utils/remote-value.ts
+var RemoteValue = class _RemoteValue {
+  /**
+   * Deserializes a LocalValue serialized object back to its original JavaScript representation
+   *
+   * @param serialized The serialized LocalValue object
+   * @returns The original JavaScript value/object
+   */
+  static fromLocalValue(serialized) {
+    const type = serialized[TYPE_CONSTANT];
+    const value = VALUE_CONSTANT in serialized ? serialized[VALUE_CONSTANT] : void 0;
+    switch (type) {
+      case "string" /* String */:
+        return value;
+      case "boolean" /* Boolean */:
+        return value;
+      case "bigint" /* BigInt */:
+        return BigInt(value);
+      case "undefined" /* Undefined */:
+        return void 0;
+      case "null" /* Null */:
+        return null;
+      case "number" /* Number */:
+        if (value === "NaN") return NaN;
+        if (value === "-0") return -0;
+        if (value === "Infinity") return Infinity;
+        if (value === "-Infinity") return -Infinity;
+        return value;
+      case "array" /* Array */:
+        return value.map((item) => _RemoteValue.fromLocalValue(item));
+      case "date" /* Date */:
+        return new Date(value);
+      case "map" /* Map */:
+        const map2 = /* @__PURE__ */ new Map();
+        for (const [key, val] of value) {
+          const deserializedKey = typeof key === "object" && key !== null ? _RemoteValue.fromLocalValue(key) : key;
+          const deserializedValue = _RemoteValue.fromLocalValue(val);
+          map2.set(deserializedKey, deserializedValue);
+        }
+        return map2;
+      case "object" /* Object */:
+        const obj = {};
+        for (const [key, val] of value) {
+          obj[key] = _RemoteValue.fromLocalValue(val);
+        }
+        return obj;
+      case "regexp" /* RegularExpression */:
+        const { pattern, flags } = value;
+        return new RegExp(pattern, flags);
+      case "set" /* Set */:
+        const set = /* @__PURE__ */ new Set();
+        for (const item of value) {
+          set.add(_RemoteValue.fromLocalValue(item));
+        }
+        return set;
+      case "symbol" /* Symbol */:
+        return Symbol(value);
+      default:
+        throw new Error(`Unsupported type: ${type}`);
+    }
+  }
+  /**
+   * Utility method to deserialize multiple LocalValues at once
+   *
+   * @param serializedValues Array of serialized LocalValue objects
+   * @returns Array of deserialized JavaScript values
+   */
+  static fromLocalValueArray(serializedValues) {
+    return serializedValues.map((value) => _RemoteValue.fromLocalValue(value));
+  }
+  /**
+   * Verifies if the given object matches the structure of a serialized LocalValue
+   *
+   * @param obj Object to verify
+   * @returns boolean indicating if the object has LocalValue structure
+   */
+  static isLocalValueObject(obj) {
+    if (typeof obj !== "object" || obj === null) {
+      return false;
+    }
+    if (!obj.hasOwnProperty(TYPE_CONSTANT)) {
+      return false;
+    }
+    const type = obj[TYPE_CONSTANT];
+    const hasTypeProperty = Object.values({ ...PrimitiveType, ...NonPrimitiveType }).includes(type);
+    if (!hasTypeProperty) {
+      return false;
+    }
+    if (type !== "null" /* Null */ && type !== "undefined" /* Undefined */) {
+      return obj.hasOwnProperty(VALUE_CONSTANT);
+    }
+    return true;
+  }
+};
+
 // src/utils/result.ts
 var result_exports = {};
 __export(result_exports, {
@@ -188,6 +316,90 @@ var unwrapErr = (result) => {
     throw result.value;
   }
 };
+
+// src/utils/serialize.ts
+function deserializeProperty(value) {
+  if (typeof value !== "string" || !value.startsWith(SERIALIZED_PREFIX)) {
+    return value;
+  }
+  return RemoteValue.fromLocalValue(JSON.parse(atob(value.slice(SERIALIZED_PREFIX.length))));
+}
+var getSlottedChildNodes = (childNodes) => {
+  const result = [];
+  for (let i2 = 0; i2 < childNodes.length; i2++) {
+    const slottedNode = childNodes[i2]["s-nr"] || void 0;
+    if (slottedNode && slottedNode.isConnected) {
+      result.push(slottedNode);
+    }
+  }
+  return result;
+};
+var addSlotRelocateNode = (newChild, slotNode, prepend, position) => {
+  if (newChild["s-ol"] && newChild["s-ol"].isConnected) {
+    return;
+  }
+  const slottedNodeLocation = document.createTextNode("");
+  slottedNodeLocation["s-nr"] = newChild;
+  if (!slotNode["s-cr"] || !slotNode["s-cr"].parentNode) return;
+  const parent = slotNode["s-cr"].parentNode;
+  const appendMethod = internalCall(parent, "appendChild");
+  if (typeof position !== "undefined") {
+    slottedNodeLocation["s-oo"] = position;
+    const childNodes = internalCall(parent, "childNodes");
+    const slotRelocateNodes = [slottedNodeLocation];
+    childNodes.forEach((n) => {
+      if (n["s-nr"]) slotRelocateNodes.push(n);
+    });
+    slotRelocateNodes.sort((a, b) => {
+      if (!a["s-oo"] || a["s-oo"] < (b["s-oo"] || 0)) return -1;
+      else if (!b["s-oo"] || b["s-oo"] < a["s-oo"]) return 1;
+      return 0;
+    });
+    slotRelocateNodes.forEach((n) => appendMethod.call(parent, n));
+  } else {
+    appendMethod.call(parent, slottedNodeLocation);
+  }
+  newChild["s-ol"] = slottedNodeLocation;
+  newChild["s-sh"] = slotNode["s-hn"];
+};
+var getSlotName = (node) => typeof node["s-sn"] === "string" ? node["s-sn"] : node.nodeType === 1 && node.getAttribute("slot") || void 0;
+function patchSlotNode(node) {
+  if (node.assignedElements || node.assignedNodes || !node["s-sr"]) return;
+  const assignedFactory = (elementsOnly) => (function(opts) {
+    const toReturn = [];
+    const slotName = this["s-sn"];
+    if (opts == null ? void 0 : opts.flatten) {
+      console.error(`
+          Flattening is not supported for Stencil non-shadow slots. 
+          You can use \`.childNodes\` to nested slot fallback content.
+          If you have a particular use case, please open an issue on the Stencil repo.
+        `);
+    }
+    const parent = this["s-cr"].parentElement;
+    const slottedNodes = parent.__childNodes ? parent.childNodes : getSlottedChildNodes(parent.childNodes);
+    slottedNodes.forEach((n) => {
+      if (slotName === getSlotName(n)) {
+        toReturn.push(n);
+      }
+    });
+    if (elementsOnly) {
+      return toReturn.filter((n) => n.nodeType === 1 /* ElementNode */);
+    }
+    return toReturn;
+  }).bind(node);
+  node.assignedElements = assignedFactory(true);
+  node.assignedNodes = assignedFactory(false);
+}
+function internalCall(node, method) {
+  if ("__" + method in node) {
+    const toReturn = node["__" + method];
+    if (typeof toReturn !== "function") return toReturn;
+    return toReturn.bind(node);
+  } else {
+    if (typeof node[method] !== "function") return node[method];
+    return node[method].bind(node);
+  }
+}
 var createTime = (fnName, tagName = "") => {
   {
     return () => {
@@ -253,7 +465,398 @@ var newVNode = (tag, text) => {
 };
 var Host = {};
 var isHost = (node) => node && node.$tag$ === Host;
+
+// src/runtime/client-hydrate.ts
+var initializeClientHydrate = (hostElm, tagName, hostId, hostRef) => {
+  var _a;
+  const endHydrate = createTime("hydrateClient", tagName);
+  const shadowRoot = hostElm.shadowRoot;
+  const childRenderNodes = [];
+  const slotNodes = [];
+  const slottedNodes = [];
+  const shadowRootNodes = shadowRoot ? [] : null;
+  const vnode = newVNode(tagName, null);
+  vnode.$elm$ = hostElm;
+  const members = Object.entries(((_a = hostRef.$cmpMeta$) == null ? void 0 : _a.$members$) || {});
+  members.forEach(([memberName, [memberFlags, metaAttributeName]]) => {
+    var _a2;
+    if (!(memberFlags & 31 /* Prop */)) {
+      return;
+    }
+    const attributeName = metaAttributeName || memberName;
+    const attrVal = hostElm.getAttribute(attributeName);
+    if (attrVal !== null) {
+      const attrPropVal = parsePropertyValue(attrVal, memberFlags);
+      (_a2 = hostRef == null ? void 0 : hostRef.$instanceValues$) == null ? void 0 : _a2.set(memberName, attrPropVal);
+    }
+  });
+  if (win.document && (!plt.$orgLocNodes$ || !plt.$orgLocNodes$.size)) {
+    initializeDocumentHydrate(win.document.body, plt.$orgLocNodes$ = /* @__PURE__ */ new Map());
+  }
+  hostElm[HYDRATE_ID] = hostId;
+  hostElm.removeAttribute(HYDRATE_ID);
+  hostRef.$vnode$ = clientHydrate(
+    vnode,
+    childRenderNodes,
+    slotNodes,
+    shadowRootNodes,
+    hostElm,
+    hostElm,
+    hostId,
+    slottedNodes
+  );
+  let crIndex = 0;
+  const crLength = childRenderNodes.length;
+  let childRenderNode;
+  for (crIndex; crIndex < crLength; crIndex++) {
+    childRenderNode = childRenderNodes[crIndex];
+    const orgLocationId = childRenderNode.$hostId$ + "." + childRenderNode.$nodeId$;
+    const orgLocationNode = plt.$orgLocNodes$.get(orgLocationId);
+    const node = childRenderNode.$elm$;
+    if (!shadowRoot) {
+      node["s-hn"] = tagName.toUpperCase();
+      if (childRenderNode.$tag$ === "slot") {
+        node["s-cr"] = hostElm["s-cr"];
+      }
+    }
+    if (childRenderNode.$tag$ === "slot") {
+      childRenderNode.$name$ = childRenderNode.$elm$["s-sn"] || childRenderNode.$elm$["name"] || null;
+      if (childRenderNode.$children$) {
+        childRenderNode.$flags$ |= 2 /* isSlotFallback */;
+        if (!childRenderNode.$elm$.childNodes.length) {
+          childRenderNode.$children$.forEach((c) => {
+            childRenderNode.$elm$.appendChild(c.$elm$);
+          });
+        }
+      } else {
+        childRenderNode.$flags$ |= 1 /* isSlotReference */;
+      }
+    }
+    if (orgLocationNode && orgLocationNode.isConnected) {
+      if (shadowRoot && orgLocationNode["s-en"] === "") {
+        orgLocationNode.parentNode.insertBefore(node, orgLocationNode.nextSibling);
+      }
+      orgLocationNode.parentNode.removeChild(orgLocationNode);
+      if (!shadowRoot) {
+        node["s-oo"] = parseInt(childRenderNode.$nodeId$);
+      }
+    }
+    plt.$orgLocNodes$.delete(orgLocationId);
+  }
+  const hosts = [];
+  const snLen = slottedNodes.length;
+  let snIndex = 0;
+  let slotGroup;
+  let snGroupIdx;
+  let snGroupLen;
+  let slottedItem;
+  for (snIndex; snIndex < snLen; snIndex++) {
+    slotGroup = slottedNodes[snIndex];
+    if (!slotGroup || !slotGroup.length) continue;
+    snGroupLen = slotGroup.length;
+    snGroupIdx = 0;
+    for (snGroupIdx; snGroupIdx < snGroupLen; snGroupIdx++) {
+      slottedItem = slotGroup[snGroupIdx];
+      if (!hosts[slottedItem.hostId]) {
+        hosts[slottedItem.hostId] = plt.$orgLocNodes$.get(slottedItem.hostId);
+      }
+      if (!hosts[slottedItem.hostId]) continue;
+      const hostEle = hosts[slottedItem.hostId];
+      if (!hostEle.shadowRoot || !shadowRoot) {
+        slottedItem.slot["s-cr"] = hostEle["s-cr"];
+        if (!slottedItem.slot["s-cr"] && hostEle.shadowRoot) {
+          slottedItem.slot["s-cr"] = hostEle;
+        } else {
+          slottedItem.slot["s-cr"] = (hostEle.__childNodes || hostEle.childNodes)[0];
+        }
+        addSlotRelocateNode(slottedItem.node, slottedItem.slot, false, slottedItem.node["s-oo"]);
+      }
+      if (hostEle.shadowRoot && slottedItem.node.parentElement !== hostEle) {
+        hostEle.appendChild(slottedItem.node);
+      }
+    }
+  }
+  if (shadowRoot && !shadowRoot.childNodes.length) {
+    let rnIdex = 0;
+    const rnLen = shadowRootNodes.length;
+    if (rnLen) {
+      for (rnIdex; rnIdex < rnLen; rnIdex++) {
+        shadowRoot.appendChild(shadowRootNodes[rnIdex]);
+      }
+      Array.from(hostElm.childNodes).forEach((node) => {
+        if (typeof node["s-sn"] !== "string") {
+          if (node.nodeType === 1 /* ElementNode */ && node.slot && node.hidden) {
+            node.removeAttribute("hidden");
+          } else if (node.nodeType === 8 /* CommentNode */ || node.nodeType === 3 /* TextNode */ && !node.wholeText.trim()) {
+            node.parentNode.removeChild(node);
+          }
+        }
+      });
+    }
+  }
+  plt.$orgLocNodes$.delete(hostElm["s-id"]);
+  hostRef.$hostElement$ = hostElm;
+  endHydrate();
+};
+var clientHydrate = (parentVNode, childRenderNodes, slotNodes, shadowRootNodes, hostElm, node, hostId, slottedNodes = []) => {
+  let childNodeType;
+  let childIdSplt;
+  let childVNode;
+  let i2;
+  if (node.nodeType === 1 /* ElementNode */) {
+    childNodeType = node.getAttribute(HYDRATE_CHILD_ID);
+    if (childNodeType) {
+      childIdSplt = childNodeType.split(".");
+      if (childIdSplt[0] === hostId || childIdSplt[0] === "0") {
+        childVNode = createSimpleVNode({
+          $flags$: 0,
+          $hostId$: childIdSplt[0],
+          $nodeId$: childIdSplt[1],
+          $depth$: childIdSplt[2],
+          $index$: childIdSplt[3],
+          $tag$: node.tagName.toLowerCase(),
+          $elm$: node,
+          // If we don't add the initial classes to the VNode, the first `vdom-render.ts` patch
+          // won't try to reconcile them. Classes set on the node will be blown away.
+          $attrs$: { class: node.className || "" }
+        });
+        childRenderNodes.push(childVNode);
+        node.removeAttribute(HYDRATE_CHILD_ID);
+        if (!parentVNode.$children$) {
+          parentVNode.$children$ = [];
+        }
+        const slotName = childVNode.$elm$.getAttribute("s-sn");
+        if (typeof slotName === "string") {
+          if (childVNode.$tag$ === "slot-fb") {
+            addSlot(
+              slotName,
+              childIdSplt[2],
+              childVNode,
+              node,
+              parentVNode,
+              childRenderNodes,
+              slotNodes,
+              shadowRootNodes,
+              slottedNodes
+            );
+          }
+          childVNode.$elm$["s-sn"] = slotName;
+          childVNode.$elm$.removeAttribute("s-sn");
+        }
+        if (childVNode.$index$ !== void 0) {
+          parentVNode.$children$[childVNode.$index$] = childVNode;
+        }
+        parentVNode = childVNode;
+        if (shadowRootNodes && childVNode.$depth$ === "0") {
+          shadowRootNodes[childVNode.$index$] = childVNode.$elm$;
+        }
+      }
+    }
+    if (node.shadowRoot) {
+      for (i2 = node.shadowRoot.childNodes.length - 1; i2 >= 0; i2--) {
+        clientHydrate(
+          parentVNode,
+          childRenderNodes,
+          slotNodes,
+          shadowRootNodes,
+          hostElm,
+          node.shadowRoot.childNodes[i2],
+          hostId,
+          slottedNodes
+        );
+      }
+    }
+    const nonShadowNodes = node.__childNodes || node.childNodes;
+    for (i2 = nonShadowNodes.length - 1; i2 >= 0; i2--) {
+      clientHydrate(
+        parentVNode,
+        childRenderNodes,
+        slotNodes,
+        shadowRootNodes,
+        hostElm,
+        nonShadowNodes[i2],
+        hostId,
+        slottedNodes
+      );
+    }
+  } else if (node.nodeType === 8 /* CommentNode */) {
+    childIdSplt = node.nodeValue.split(".");
+    if (childIdSplt[1] === hostId || childIdSplt[1] === "0") {
+      childNodeType = childIdSplt[0];
+      childVNode = createSimpleVNode({
+        $hostId$: childIdSplt[1],
+        $nodeId$: childIdSplt[2],
+        $depth$: childIdSplt[3],
+        $index$: childIdSplt[4] || "0",
+        $elm$: node,
+        $attrs$: null,
+        $children$: null,
+        $key$: null,
+        $name$: null,
+        $tag$: null,
+        $text$: null
+      });
+      if (childNodeType === TEXT_NODE_ID) {
+        childVNode.$elm$ = findCorrespondingNode(node, 3 /* TextNode */);
+        if (childVNode.$elm$ && childVNode.$elm$.nodeType === 3 /* TextNode */) {
+          childVNode.$text$ = childVNode.$elm$.textContent;
+          childRenderNodes.push(childVNode);
+          node.remove();
+          if (hostId === childVNode.$hostId$) {
+            if (!parentVNode.$children$) {
+              parentVNode.$children$ = [];
+            }
+            parentVNode.$children$[childVNode.$index$] = childVNode;
+          }
+          if (shadowRootNodes && childVNode.$depth$ === "0") {
+            shadowRootNodes[childVNode.$index$] = childVNode.$elm$;
+          }
+        }
+      } else if (childNodeType === COMMENT_NODE_ID) {
+        childVNode.$elm$ = findCorrespondingNode(node, 8 /* CommentNode */);
+        if (childVNode.$elm$ && childVNode.$elm$.nodeType === 8 /* CommentNode */) {
+          childRenderNodes.push(childVNode);
+          node.remove();
+        }
+      } else if (childVNode.$hostId$ === hostId) {
+        if (childNodeType === SLOT_NODE_ID) {
+          const slotName = node["s-sn"] = childIdSplt[5] || "";
+          addSlot(
+            slotName,
+            childIdSplt[2],
+            childVNode,
+            node,
+            parentVNode,
+            childRenderNodes,
+            slotNodes,
+            shadowRootNodes,
+            slottedNodes
+          );
+        } else if (childNodeType === CONTENT_REF_ID) {
+          if (shadowRootNodes) {
+            node.remove();
+          }
+        }
+      }
+    }
+  } else if (parentVNode && parentVNode.$tag$ === "style") {
+    const vnode = newVNode(null, node.textContent);
+    vnode.$elm$ = node;
+    vnode.$index$ = "0";
+    parentVNode.$children$ = [vnode];
+  } else {
+    if (node.nodeType === 3 /* TextNode */ && !node.wholeText.trim()) {
+      node.remove();
+    }
+  }
+  return parentVNode;
+};
+var initializeDocumentHydrate = (node, orgLocNodes) => {
+  if (node.nodeType === 1 /* ElementNode */) {
+    const componentId = node[HYDRATE_ID] || node.getAttribute(HYDRATE_ID);
+    if (componentId) {
+      orgLocNodes.set(componentId, node);
+    }
+    let i2 = 0;
+    if (node.shadowRoot) {
+      for (; i2 < node.shadowRoot.childNodes.length; i2++) {
+        initializeDocumentHydrate(node.shadowRoot.childNodes[i2], orgLocNodes);
+      }
+    }
+    const nonShadowNodes = node.__childNodes || node.childNodes;
+    for (i2 = 0; i2 < nonShadowNodes.length; i2++) {
+      initializeDocumentHydrate(nonShadowNodes[i2], orgLocNodes);
+    }
+  } else if (node.nodeType === 8 /* CommentNode */) {
+    const childIdSplt = node.nodeValue.split(".");
+    if (childIdSplt[0] === ORG_LOCATION_ID) {
+      orgLocNodes.set(childIdSplt[1] + "." + childIdSplt[2], node);
+      node.nodeValue = "";
+      node["s-en"] = childIdSplt[3];
+    }
+  }
+};
+var createSimpleVNode = (vnode) => {
+  const defaultVNode = {
+    $flags$: 0,
+    $hostId$: null,
+    $nodeId$: null,
+    $depth$: null,
+    $index$: "0",
+    $elm$: null,
+    $attrs$: null,
+    $children$: null,
+    $key$: null,
+    $name$: null,
+    $tag$: null,
+    $text$: null
+  };
+  return { ...defaultVNode, ...vnode };
+};
+function addSlot(slotName, slotId, childVNode, node, parentVNode, childRenderNodes, slotNodes, shadowRootNodes, slottedNodes) {
+  node["s-sr"] = true;
+  childVNode.$name$ = slotName || null;
+  childVNode.$tag$ = "slot";
+  const parentNodeId = (parentVNode == null ? void 0 : parentVNode.$elm$) ? parentVNode.$elm$["s-id"] || parentVNode.$elm$.getAttribute("s-id") : "";
+  if (shadowRootNodes && win.document) {
+    const slot = childVNode.$elm$ = win.document.createElement(childVNode.$tag$);
+    if (childVNode.$name$) {
+      childVNode.$elm$.setAttribute("name", slotName);
+    }
+    if (parentNodeId && parentNodeId !== childVNode.$hostId$) {
+      parentVNode.$elm$.insertBefore(slot, parentVNode.$elm$.children[0]);
+    } else {
+      node.parentNode.insertBefore(childVNode.$elm$, node);
+    }
+    addSlottedNodes(slottedNodes, slotId, slotName, node, childVNode.$hostId$);
+    node.remove();
+    if (childVNode.$depth$ === "0") {
+      shadowRootNodes[childVNode.$index$] = childVNode.$elm$;
+    }
+  } else {
+    const slot = childVNode.$elm$;
+    const shouldMove = parentNodeId && parentNodeId !== childVNode.$hostId$ && parentVNode.$elm$.shadowRoot;
+    addSlottedNodes(slottedNodes, slotId, slotName, node, shouldMove ? parentNodeId : childVNode.$hostId$);
+    patchSlotNode(node);
+    if (shouldMove) {
+      parentVNode.$elm$.insertBefore(slot, parentVNode.$elm$.children[0]);
+    }
+    childRenderNodes.push(childVNode);
+  }
+  slotNodes.push(childVNode);
+  if (!parentVNode.$children$) {
+    parentVNode.$children$ = [];
+  }
+  parentVNode.$children$[childVNode.$index$] = childVNode;
+}
+var addSlottedNodes = (slottedNodes, slotNodeId, slotName, slotNode, hostId) => {
+  let slottedNode = slotNode.nextSibling;
+  slottedNodes[slotNodeId] = slottedNodes[slotNodeId] || [];
+  while (slottedNode && ((slottedNode["getAttribute"] && slottedNode.getAttribute("slot") || slottedNode["s-sn"]) === slotName || slotName === "" && !slottedNode["s-sn"] && (slottedNode.nodeType === 8 /* CommentNode */ && slottedNode.nodeValue.indexOf(".") !== 1 || slottedNode.nodeType === 3 /* TextNode */))) {
+    slottedNode["s-sn"] = slotName;
+    slottedNodes[slotNodeId].push({ slot: slotNode, node: slottedNode, hostId });
+    slottedNode = slottedNode.nextSibling;
+  }
+};
+var findCorrespondingNode = (node, type) => {
+  let sibling = node;
+  do {
+    sibling = sibling.nextSibling;
+  } while (sibling && (sibling.nodeType !== type || !sibling.nodeValue));
+  return sibling;
+};
 var parsePropertyValue = (propValue, propType) => {
+  if (typeof propValue === "string" && (propValue.startsWith("{") && propValue.endsWith("}") || propValue.startsWith("[") && propValue.endsWith("]"))) {
+    try {
+      propValue = JSON.parse(propValue);
+      return propValue;
+    } catch (e) {
+    }
+  }
+  if (typeof propValue === "string" && propValue.startsWith(SERIALIZED_PREFIX)) {
+    propValue = deserializeProperty(propValue);
+    return propValue;
+  }
   if (propValue != null && !isComplexType(propValue)) {
     if (propType & 1 /* String */) {
       return String(propValue);
@@ -299,7 +902,9 @@ var addStyle = (styleContainerNode, cmpMeta, mode) => {
         rootAppliedStyles.set(styleContainerNode, appliedStyles = /* @__PURE__ */ new Set());
       }
       if (!appliedStyles.has(scopeId2)) {
-        {
+        if (styleContainerNode.host && (styleElm = styleContainerNode.querySelector(`[${HYDRATED_STYLE_ID}="${scopeId2}"]`))) {
+          styleElm.innerHTML = style;
+        } else {
           styleElm = document.querySelector(`[${HYDRATED_STYLE_ID}="${scopeId2}"]`) || win.document.createElement("style");
           styleElm.innerHTML = style;
           const nonce = (_a = plt.$nonce$) != null ? _a : queryNonceMetaTagContent(win.document);
@@ -363,6 +968,17 @@ var attachStyles = (hostRef) => {
   endAttachStyles();
 };
 var getScopeId = (cmp, mode) => "sc-" + (cmp.$tagName$);
+var convertScopedToShadow = (css) => css.replace(/\/\*!@([^\/]+)\*\/[^\{]+\{/g, "$1{");
+var hydrateScopedToShadow = () => {
+  if (!win.document) {
+    return;
+  }
+  const styles2 = win.document.querySelectorAll(`[${HYDRATED_STYLE_ID}]`);
+  let i2 = 0;
+  for (; i2 < styles2.length; i2++) {
+    registerStyle(styles2[i2].getAttribute(HYDRATED_STYLE_ID), convertScopedToShadow(styles2[i2].innerHTML), true);
+  }
+};
 var setAccessor = (elm, memberName, oldValue, newValue, isSvg, flags, initialRender) => {
   if (oldValue === newValue) {
     return;
@@ -921,10 +1537,21 @@ var connectedCallback = (elm) => {
     const endConnected = createTime("connectedCallback", cmpMeta.$tagName$);
     if (!(hostRef.$flags$ & 1 /* hasConnected */)) {
       hostRef.$flags$ |= 1 /* hasConnected */;
+      let hostId;
+      {
+        hostId = elm.getAttribute(HYDRATE_ID);
+        if (hostId) {
+          if (cmpMeta.$flags$ & 1 /* shadowDomEncapsulation */) {
+            const scopeId2 = addStyle(elm.shadowRoot, cmpMeta);
+            elm.classList.remove(scopeId2 + "-h", scopeId2 + "-s");
+          }
+          initializeClientHydrate(elm, cmpMeta.$tagName$, hostId, hostRef);
+        }
+      }
       {
         let ancestorComponent = elm;
         while (ancestorComponent = ancestorComponent.parentNode || ancestorComponent.host) {
-          if (ancestorComponent["s-p"]) {
+          if (ancestorComponent.nodeType === 1 /* ElementNode */ && ancestorComponent.hasAttribute("s-id") && ancestorComponent["s-p"] || ancestorComponent["s-p"]) {
             attachToAncestor(hostRef, hostRef.$ancestorComponent$ = ancestorComponent);
             break;
           }
@@ -970,6 +1597,9 @@ var proxyCustomElement = (Cstr, compactMeta) => {
   };
   {
     cmpMeta.$members$ = compactMeta[2];
+  }
+  {
+    hydrateScopedToShadow();
   }
   const originalConnectedCallback = Cstr.prototype.connectedCallback;
   const originalDisconnectedCallback = Cstr.prototype.disconnectedCallback;
