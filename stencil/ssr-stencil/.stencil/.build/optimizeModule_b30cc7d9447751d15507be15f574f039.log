@@ -1,0 +1,1 @@
+import{p as r,b as t}from"./p-B0DXrmy8.js";export{s as setNonce}from"./p-B0DXrmy8.js";import{g as a}from"./p-DQuL1Twl.js";var m=()=>{const s=import.meta.url;const t={};if(s!==""){t.resourcesUrl=new URL(".",s).href}return r(t)};m().then((async r=>{await a();return t([["p-a0e3a05c",[[1,"my-component",{first:[1],middle:[1],last:[1]}]]]],r)}));
