@@ -1,26 +1,15 @@
 {
   "compilerOptions": {
-    "allowSyntheticDefaultImports": true,
-    "allowUnreachableCode": false,
-    "declaration": false,
-    "experimentalDecorators": true,
-    "lib": [
-      "dom",
-      "es2022"
-    ],
-    "moduleResolution": "bundler",
-    "module": "esnext",
-    "target": "es2022",
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    "target": "es2017",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
     "jsx": "react",
     "jsxFactory": "h",
-    "jsxFragmentFactory": "h.Fragment"
+    "lib": ["dom", "es2017"],
+    "outDir": "dist",
+    "experimentalDecorators": true
   },
-  "include": [
-    "src"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "server/**/*.ts"],
+  "exclude": ["node_modules"]
 }

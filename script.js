@@ -1,13 +1,45 @@
-// Select the body or any other container where you want to add the component
-const container = document.body;
+// client/app.js
+import { defineCustomElements } from "./stencil/ssr-stencil/loader/index.js";
 
-// Create the custom element
-const myComponent = document.createElement("my-component");
+// Function to fetch and insert an SSR component
+async function fetchAndRenderComponent(componentName, props, targetElement) {
+  const queryParams = new URLSearchParams(props).toString();
+  const response = await fetch(
+    `/api/component/${componentName}?${queryParams}`
+  );
+  const { html, styles, script } = await response.json();
 
-// Set the attributes
-myComponent.setAttribute("first", "df");
-myComponent.setAttribute("middle", "ds");
-myComponent.setAttribute("last", "sdsx");
+  // Insert styles to head if needed
+  if (styles) {
+    const styleEl = document.createElement("style");
+    styleEl.innerHTML = styles;
+    document.head.appendChild(styleEl);
+  }
 
-// Append the custom element to the container
-container.appendChild(myComponent);
+  // Insert component HTML
+  targetElement.innerHTML = html;
+
+  // Insert hydration script
+  const scriptEl = document.createElement("div");
+  scriptEl.innerHTML = script.hydrateScript;
+  document.body.appendChild(scriptEl.firstChild);
+
+  // Load component definition
+  await import(`../dist/components/${script.componentChunkName}`);
+}
+
+// Initialize web components
+defineCustomElements().then(() => {
+  console.log("Components registry initialized");
+
+  // Example usage
+  const container = document.getElementById("component-container");
+  fetchAndRenderComponent(
+    "user-card",
+    {
+      name: "Alice Smith",
+      title: "Product Manager",
+    },
+    container
+  );
+});
